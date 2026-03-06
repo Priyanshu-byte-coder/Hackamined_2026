@@ -117,6 +117,9 @@ export const adminApi = {
     },
     getSettings: () => api.get<any>('/admin/settings'),
     updateSettings: (data: any) => api.put('/admin/settings', data),
+
+    // Green Analytics
+    getGreenAnalytics: () => api.get<any>('/admin/green-analytics'),
 };
 
 // ─── Chatbot ────────────────────────────────────────

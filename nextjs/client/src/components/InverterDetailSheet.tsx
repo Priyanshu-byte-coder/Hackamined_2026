@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { MessageCircle, Loader2, Bot, FileDown, ChevronRight, Zap } from 'lucide-react';
+import { Loader2, Bot, FileDown, ChevronRight, Zap, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { operatorApi, chatbotApi } from '@/lib/api';
 
@@ -58,10 +58,8 @@ const URGENCY_LABEL: Record<string, string> = {
 };
 
 export default function InverterDetailSheet({ inverter, onClose, plantName, blockName }: Props) {
-  const navigate = useNavigate();
   const [trendParam, setTrendParam] = useState<ParamKey>('dc_voltage');
   const [trendRange, setTrendRange] = useState<'24h' | '48h'>('24h');
-  const [aiTabActive, setAiTabActive] = useState(false);
 
   const inverterId = inverter?.id;
   // The GenAI system uses the inverter NAME (e.g. INV-P1-L2-0), not the DB UUID
@@ -84,11 +82,11 @@ export default function InverterDetailSheet({ inverter, onClose, plantName, bloc
     staleTime: 60_000,
   });
 
-  // ── AI Explanation (AI tab) ────────────────────────────────────────────────
+  // ── AI Explanation — auto-fetches when sheet opens ───────────────────────
   const { data: explanation, isFetching: explanationFetching, refetch: refetchExplanation, isError: explanationError } = useQuery({
     queryKey: ['ai-explanation', inverterName],
     queryFn: () => chatbotApi.getExplanation(inverterName!),
-    enabled: !!inverterName && aiTabActive,
+    enabled: !!inverterName,
     staleTime: 5 * 60_000,
     retry: 1,
   });
@@ -132,15 +130,12 @@ export default function InverterDetailSheet({ inverter, onClose, plantName, bloc
           <p className="text-sm text-muted-foreground">{plantName} › {blockName}</p>
         </SheetHeader>
 
-        <Tabs defaultValue="overview" className="mt-2" onValueChange={v => { if (v === 'ai') setAiTabActive(true); }}>
-          <TabsList className="w-full grid grid-cols-5">
+        <Tabs defaultValue="overview" className="mt-2">
+          <TabsList className="w-full grid grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="shap" disabled={!showShap}>SHAP</TabsTrigger>
             <TabsTrigger value="trend">Trend</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
-            <TabsTrigger value="ai" className="flex items-center gap-1">
-              <Bot className="h-3 w-3" />AI
-            </TabsTrigger>
           </TabsList>
 
           {/* ── Overview ── */}
@@ -171,14 +166,117 @@ export default function InverterDetailSheet({ inverter, onClose, plantName, bloc
               </div>
             )}
 
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => { onClose(); navigate('/operator/chatbot', { state: { context: { inverter_id: inverter.id, inverter_name: inverter.name, category, fault_type: inverter.fault_type } } }); }}
-            >
-              <MessageCircle className="h-4 w-4 mr-2" />
-              Ask AI about this inverter
-            </Button>
+            {/* ── Inline AI Summary ── */}
+            <div className="rounded-lg border bg-muted/40 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/60">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <Bot className="h-3.5 w-3.5" />
+                  AI Analysis
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 text-xs px-2 gap-1"
+                  onClick={() => refetchExplanation()}
+                  disabled={explanationFetching}
+                >
+                  {explanationFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                  {explanation ? 'Refresh' : 'Retry'}
+                </Button>
+              </div>
+
+              {/* Loading */}
+              {explanationFetching && (
+                <div className="p-3 space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-5/6" />
+                  <Skeleton className="h-3 w-4/6" />
+                </div>
+              )}
+
+              {/* Error */}
+              {explanationError && !explanationFetching && (
+                <div className="flex items-center gap-2 p-3 text-xs text-destructive">
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                  Could not load AI analysis. Ensure the GenAI server is running.
+                </div>
+              )}
+
+              {/* Content */}
+              {explanation && !explanationFetching && (
+                <div className="p-3 space-y-3 text-sm">
+                  {/* Risk + urgency */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xl font-extrabold">{Math.round(explanation.risk_score * 100)}%</span>
+                    <span className="text-xs text-muted-foreground">risk score</span>
+                    <Badge className={URGENCY_COLORS[explanation.urgency] ?? 'bg-muted'}>
+                      {URGENCY_LABEL[explanation.urgency] ?? explanation.urgency.toUpperCase()}
+                    </Badge>
+                  </div>
+
+                  {/* Summary */}
+                  <p className="text-xs text-muted-foreground leading-relaxed">{explanation.summary}</p>
+
+                  {/* Key factors */}
+                  {explanation.key_factors?.length > 0 && (
+                    <div className="rounded bg-background/70 p-2 space-y-1">
+                      <p className="text-xs font-semibold">Key Risk Factors</p>
+                      <ul className="space-y-0.5">
+                        {explanation.key_factors.map((f: any, i: number) => (
+                          <li key={i} className="flex items-start gap-1 text-xs text-muted-foreground">
+                            <ChevronRight className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                            <span><span className="font-medium text-foreground">{f.feature}</span>{f.raw_value ? ` (${f.raw_value})` : ''}{f.impact ? ` — ${f.impact}` : ''}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Recommended actions */}
+                  {explanation.recommended_actions?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold mb-1">Recommended Actions</p>
+                      <ol className="space-y-0.5 list-decimal list-inside text-xs text-muted-foreground">
+                        {explanation.recommended_actions.map((a: string, i: number) => (
+                          <li key={i}>{a}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
+                  {/* PDF download */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2 h-7 text-xs"
+                    onClick={async () => {
+                      try {
+                        await chatbotApi.generateTicket(inverterName!);
+                        const token = sessionStorage.getItem('sw_token');
+                        const res = await fetch(chatbotApi.getPdfUrl(inverterName!), {
+                          headers: { Authorization: `Bearer ${token}` },
+                          credentials: 'include',
+                        });
+                        if (!res.ok) throw new Error('PDF unavailable');
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; a.download = `${inverterName}-ticket.pdf`; a.click();
+                        URL.revokeObjectURL(url);
+                      } catch { /* silently fail */ }
+                    }}
+                  >
+                    <FileDown className="h-3.5 w-3.5" /> Download Maintenance Ticket
+                  </Button>
+                </div>
+              )}
+
+              {/* Empty — waiting for first load */}
+              {!explanation && !explanationFetching && !explanationError && (
+                <p className="text-xs text-muted-foreground text-center py-4">Generating AI analysis…</p>
+              )}
+            </div>
           </TabsContent>
 
           {/* ── SHAP ── */}
@@ -300,131 +398,7 @@ export default function InverterDetailSheet({ inverter, onClose, plantName, bloc
             )}
           </TabsContent>
 
-          {/* ── AI Explanation ── */}
-          <TabsContent value="ai" className="mt-4 space-y-4">
-            {/* Action bar */}
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Powered by SolarGuard AI (GenAI)</p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1"
-                onClick={() => refetchExplanation()}
-                disabled={explanationFetching}
-              >
-                {explanationFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                {explanation ? 'Refresh' : 'Explain'}
-              </Button>
-            </div>
 
-            {/* Loading skeletons */}
-            {explanationFetching && (
-              <div className="space-y-3">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-5/6" />
-                <Skeleton className="h-4 w-4/6" />
-              </div>
-            )}
-
-            {/* Error state */}
-            {explanationError && !explanationFetching && (
-              <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-                Could not load AI explanation. Make sure the GenAI server is running on port 8000.
-              </div>
-            )}
-
-            {/* Explanation content */}
-            {explanation && !explanationFetching && (
-              <div className="space-y-4 text-sm">
-                {/* Risk score + urgency */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-2xl font-extrabold">
-                    {Math.round(explanation.risk_score * 100)}%
-                  </span>
-                  <span className="text-muted-foreground text-xs">risk score</span>
-                  <Badge className={URGENCY_COLORS[explanation.urgency] ?? 'bg-muted'}>
-                    {URGENCY_LABEL[explanation.urgency] ?? explanation.urgency.toUpperCase()}
-                  </Badge>
-                </div>
-
-                {/* Summary */}
-                <p className="text-muted-foreground leading-relaxed">{explanation.summary}</p>
-
-                {/* Key factors */}
-                {explanation.key_factors?.length > 0 && (
-                  <div className="rounded-lg bg-muted p-3 space-y-2">
-                    <p className="font-semibold">Key Risk Factors</p>
-                    <ul className="space-y-1.5">
-                      {explanation.key_factors.map((f: any, i: number) => (
-                        <li key={i} className="flex items-start gap-1.5">
-                          <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-muted-foreground" />
-                          <span>
-                            <span className="font-medium">{f.feature}</span>
-                            {f.raw_value ? ` (${f.raw_value})` : ''}
-                            {f.impact ? ` — ${f.impact}` : ''}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Recommended actions */}
-                {explanation.recommended_actions?.length > 0 && (
-                  <div>
-                    <p className="font-semibold mb-2">Recommended Actions</p>
-                    <ol className="space-y-1.5 list-decimal list-inside text-muted-foreground">
-                      {explanation.recommended_actions.map((a: string, i: number) => (
-                        <li key={i}>{a}</li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-
-                {/* Disclaimer */}
-                {explanation.disclaimer && (
-                  <p className="text-[10px] text-muted-foreground italic border-t pt-3">{explanation.disclaimer}</p>
-                )}
-              </div>
-            )}
-
-            {/* Empty state */}
-            {!explanation && !explanationFetching && !explanationError && (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                Click <strong>Explain</strong> to fetch an AI-generated risk analysis.
-              </p>
-            )}
-
-            {/* PDF Download */}
-            <div className="border-t pt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-2"
-                onClick={async () => {
-                  try {
-                    await chatbotApi.generateTicket(inverterName!);
-                    const token = sessionStorage.getItem('sw_token');
-                    const res = await fetch(chatbotApi.getPdfUrl(inverterName!), {
-                      headers: { Authorization: `Bearer ${token}` },
-                      credentials: 'include',
-                    });
-                    if (!res.ok) throw new Error('PDF unavailable');
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url; a.download = `${inverterName}-ticket.pdf`; a.click();
-                    URL.revokeObjectURL(url);
-                  } catch { /* silently fail */ }
-                }}
-              >
-                <FileDown className="h-4 w-4" /> Download Maintenance Ticket PDF
-              </Button>
-            </div>
-          </TabsContent>
         </Tabs>
       </SheetContent>
     </Sheet>
