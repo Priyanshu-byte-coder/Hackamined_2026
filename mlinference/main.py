@@ -52,9 +52,11 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:5173",
+        "http://localhost:8000",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -331,4 +333,6 @@ async def global_exception_handler(request, exc):
 # ── Run with: python main.py ────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+    port = int(os.getenv("ML_PORT", "8001"))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
