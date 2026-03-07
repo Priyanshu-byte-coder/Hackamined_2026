@@ -12,7 +12,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import LLM_API_KEY
+from app.config import LLM_API_KEY, LANGCHAIN_API_KEY
+from app.langsmith_client import fetch_traces, fetch_trace_detail, compute_analytics
 from app.models import (
     ExplanationResponse,
     ChatRequest,
@@ -262,3 +263,44 @@ async def get_single_prediction(inverter_id: str):
     if not p:
         raise HTTPException(404, f"No prediction for '{inverter_id}'")
     return p.model_dump(mode="json")
+
+
+# =====================================================================
+#  LANGSMITH OBSERVABILITY
+# =====================================================================
+@app.get("/langsmith/analytics", tags=["LangSmith"])
+async def langsmith_analytics(
+    hours: int = Query(168, description="Look-back window in hours (default 7 days)"),
+):
+    """Aggregated analytics: latency, tokens, success rate, endpoint breakdown, timeline."""
+    if not LANGCHAIN_API_KEY:
+        raise HTTPException(400, "LANGCHAIN_API_KEY not configured in .env")
+    try:
+        return compute_analytics(hours_back=hours)
+    except Exception as exc:
+        raise HTTPException(500, f"LangSmith API error: {exc}")
+
+
+@app.get("/langsmith/traces", tags=["LangSmith"])
+async def langsmith_traces(
+    limit: int = Query(50, description="Max traces to return"),
+    hours: int = Query(24, description="Look-back window in hours"),
+):
+    """List recent LLM traces with inputs, outputs, tokens, and latency."""
+    if not LANGCHAIN_API_KEY:
+        raise HTTPException(400, "LANGCHAIN_API_KEY not configured in .env")
+    try:
+        return fetch_traces(limit=limit, hours_back=hours)
+    except Exception as exc:
+        raise HTTPException(500, f"LangSmith API error: {exc}")
+
+
+@app.get("/langsmith/traces/{run_id}", tags=["LangSmith"])
+async def langsmith_trace_detail(run_id: str):
+    """Full detail for a single trace including child LLM calls."""
+    if not LANGCHAIN_API_KEY:
+        raise HTTPException(400, "LANGCHAIN_API_KEY not configured in .env")
+    try:
+        return fetch_trace_detail(run_id)
+    except Exception as exc:
+        raise HTTPException(500, f"LangSmith API error: {exc}")
