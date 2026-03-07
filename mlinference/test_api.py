@@ -39,7 +39,7 @@ r = get("/model/info")
 print(f"  n_features: {r['n_features']}")
 print(f"  class_names: {r['class_names']}")
 print(f"  core_input_fields: {r['core_input_fields']}")
-assert r["n_features"] == 183
+assert r["n_features"] == 145
 print("✓ PASS\n")
 
 # ── 3. Single Prediction (healthy inverter) ──
