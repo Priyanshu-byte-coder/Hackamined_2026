@@ -8,5 +8,7 @@ if not exist ".venv\Scripts\activate.bat" (
 )
 
 call .venv\Scripts\activate.bat
-python main.py
+set ML_PORT=8001
+echo Starting on port %ML_PORT%...
+uvicorn main:app --host 0.0.0.0 --port %ML_PORT% --reload
 pause

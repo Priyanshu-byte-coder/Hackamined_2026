@@ -27,5 +27,8 @@ LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "tr
 LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY", "")
 LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT", "hackamined-prod")
 
+# ---------- ML Inference ----------
+ML_INFERENCE_URL = os.getenv("ML_INFERENCE_URL", "http://localhost:8001")
+
 # ---------- Outputs ----------
 TICKET_DIR = os.getenv("TICKET_DIR", str(BASE_DIR / "tickets"))
