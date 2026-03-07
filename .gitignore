@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.local
+
+# ML Data and Models - DO NOT COMMIT THESE
+ml/data/**/*.csv
+ml/data/**/*.parquet
+ml/processed/*.parquet
+ml/processed/*.pkl
+ml/models/*.pkl
+ml/models/*.joblib
+ml/outputs/*.png
+ml/outputs/*.csv
+mlinference/models/*.pkl
+mlinference/models/*.joblib
+
+# Large binary files
+*.parquet
+*.h5
+*.hdf5
+*.bin
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db

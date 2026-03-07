@@ -22,5 +22,10 @@ CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "800"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 TOP_K = int(os.getenv("TOP_K_RESULTS", "5"))
 
+# ---------- LangSmith ----------
+LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
+LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY", "")
+LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT", "hackamined-prod")
+
 # ---------- Outputs ----------
 TICKET_DIR = os.getenv("TICKET_DIR", str(BASE_DIR / "tickets"))
