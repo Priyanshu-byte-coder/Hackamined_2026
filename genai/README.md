@@ -286,6 +286,7 @@ genai/
 |   +-- conversation.py      # Multi-turn chat memory
 |   +-- ticket.py            # PDF maintenance ticket generator
 |   +-- synthetic_data.py    # Mock ML backend (12 test inverters)
+|   +-- langsmith_client.py  # LangSmith API client (fetch traces, analytics)
 |
 +-- comparative_analysis/
 |   +-- config.py            # Model configurations for ablation study
@@ -298,7 +299,8 @@ genai/
 |   +-- README.md            # Detailed ablation study report
 |   +-- ABLATION_REPORT.md   # Auto-generated summary report
 |
-+-- simulation_dashboard.html # Live monitoring UI
++-- simulation_dashboard.html  # Live monitoring UI
++-- langsmith_dashboard.html   # LangSmith observability dashboard (charts + trace explorer)
 +-- dashboard.html            # Standalone inverter dashboard
 +-- serve_ui.py               # Simple HTTP server for UI
 +-- test_endpoints.py         # Automated test suite
@@ -1140,6 +1142,96 @@ LUMIN.AI implements a **4-layer guardrail system** to ensure the LLM never fabri
 | **4. Disclaimer** | "All values from sensor telemetry. Nothing fabricated." | Appended to every response |
 
 **Result**: 100% hallucination prevention across all 27 ablation test cases for all 3 models.
+
+---
+
+## 🔍 LangSmith Observability
+
+**Real-time LLM tracing and monitoring for complete transparency into AI decision-making.**
+
+> **🔗 Public Trace Link (share with judges):** https://smith.langchain.com/public/25d80aa6-41b8-4e01-9bf2-8414babc32f3/r
+
+### What LangSmith Shows
+
+Every LLM call is automatically traced with:
+- **Full prompts** — System instructions + user context sent to the LLM
+- **LLM responses** — Complete output before guardrails
+- **Token usage** — Input/output tokens per call
+- **Latency** — Response time for each step
+- **Model details** — Which model, temperature, max tokens
+- **RAG retrieval** — Document chunks retrieved and relevance scores
+- **Multi-step workflows** — Agent reasoning chains for ticket generation
+
+### Setup (Already Configured)
+
+1. **Environment variables** (in `.env`):
+   ```env
+   LANGCHAIN_TRACING_V2=true
+   LANGCHAIN_API_KEY=your_langsmith_key
+   LANGCHAIN_PROJECT=hackamined-prod
+   ```
+
+2. **Auto-tracing enabled** — All LLM calls in `app/llm.py` are wrapped with `langsmith.wrappers.wrap_openai`
+
+3. **No code changes needed** — Tracing is transparent to the application
+
+### LangSmith Analytics Dashboard
+
+LUMIN.AI includes a **built-in analytics dashboard** (`langsmith_dashboard.html`) that fetches all trace data from LangSmith and displays it with interactive charts and a full trace explorer.
+
+#### How to Open
+
+1. **Start the backend**:
+   ```bash
+   uvicorn app.main:app --reload --port 8000
+   ```
+
+2. **Open the dashboard**:
+   ```bash
+   start langsmith_dashboard.html
+   ```
+
+#### Dashboard Features
+
+- **KPI Cards** — Total traces, success rate, avg latency, total tokens, prompt/completion token split
+- **Latency Over Time** — Line chart showing response times for each LLM call
+- **Token Usage Over Time** — Stacked bar chart (prompt vs completion tokens)
+- **Calls by Endpoint** — Doughnut chart showing distribution across operations
+- **Avg Latency by Endpoint** — Horizontal bar chart comparing endpoint performance
+- **Success vs Errors** — Doughnut chart for reliability overview
+- **Prompt vs Completion Tokens** — Pie chart for token efficiency analysis
+- **Traces Table** — Click any row to see full trace detail:
+  - Complete input prompts (system + user)
+  - Full LLM output
+  - Child steps (RAG retrieval, LLM calls)
+  - Token counts and metadata
+  - Error details (if any)
+
+#### Time Range Filter
+
+Select from 1 hour, 6 hours, 24 hours, 3 days, or 7 days lookback.
+
+### LangSmith API Endpoints
+
+These endpoints are available on the backend to programmatically access LangSmith data:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/langsmith/analytics?hours=168` | GET | Aggregated analytics: latency, tokens, success rate, endpoint breakdown, timeline |
+| `/langsmith/traces?limit=50&hours=24` | GET | List recent traces with inputs, outputs, tokens, latency |
+| `/langsmith/traces/{run_id}` | GET | Full detail for a single trace including child LLM calls |
+
+### For Judges
+
+1. **Public trace link** (no login needed):
+   https://smith.langchain.com/public/25d80aa6-41b8-4e01-9bf2-8414babc32f3/r
+
+2. **Analytics dashboard** — Open `langsmith_dashboard.html` to see:
+   - All LLM calls with full prompts and responses
+   - 6 interactive charts (latency, tokens, endpoints, success rate)
+   - Click any trace row for detailed input/output inspection
+
+3. **API access** — Judges can also hit `http://localhost:8000/langsmith/analytics` for raw JSON data
 
 ---
 
