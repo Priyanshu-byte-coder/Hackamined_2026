@@ -26,11 +26,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger("mlinference")
 
+from contextlib import asynccontextmanager
+
+# ── Startup event ────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load model and SHAP explainer on server start."""
+    engine.load()
+    shap_explainer.initialize(engine.model)
+    logger.info("Server startup complete.")
+    yield
+
 # ── FastAPI app ──────────────────────────────────────────────────
 app = FastAPI(
     title="SolarWatch ML Inference API",
     description="XGBoost-based solar inverter risk prediction with SHAP explanations.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # ── CORS (allow Express.js backend + frontend dev servers) ───────
@@ -48,15 +60,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# ── Startup event ────────────────────────────────────────────────
-@app.on_event("startup")
-def startup():
-    """Load model and SHAP explainer on server start."""
-    engine.load()
-    shap_explainer.initialize(engine.model)
-    logger.info("Server startup complete.")
 
 
 # =====================================================================
