@@ -72,8 +72,8 @@ export default function InverterDetailSheet({ inverter, onClose, plantName, bloc
     queryKey: ['inverter-readings', inverterId, trendRange],
     queryFn: () => operatorApi.getReadings(inverterId, trendRange),
     enabled: !!inverterId,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 3_000,
+    refetchInterval: 5_000,
   });
 
   // ── Fault history (History tab) ────────────────────────────────────────────

@@ -30,7 +30,7 @@ export default function OperatorLayout() {
   const { data: alerts = [] } = useQuery({
     queryKey: ['operator-alerts'],
     queryFn: () => operatorApi.getAlerts(),
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const pendingAlerts = (alerts as any[]).filter((a: any) => !a.acknowledged);

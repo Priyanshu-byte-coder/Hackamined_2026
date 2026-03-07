@@ -177,6 +177,28 @@ export default function MLPredictPage() {
       }))
     : [];
 
+  // Input echo — the readings field in ML response should match what we sent
+  const inputEcho = pred?.readings || {};
+  const inputSent = result ? {
+    dc_voltage: Number(form.dc_voltage),
+    dc_current: Number(form.dc_current),
+    ac_power: Number(form.ac_power),
+    module_temp: Number(form.module_temp),
+    ambient_temp: Number(form.ambient_temp),
+    irradiation: Number(form.irradiation),
+  } : {};
+
+  // Clean JSON for display — strip the huge all_values to avoid confusion
+  const cleanPred = pred ? {
+    ...pred,
+    shap: pred.shap ? {
+      top_features: pred.shap.top_features,
+      predicted_class: pred.shap.predicted_class,
+      base_value: pred.shap.base_value,
+      ...(pred.shap.all_values ? { all_values: `[${Object.keys(pred.shap.all_values).length} SHAP contribution values hidden for clarity]` } : {}),
+    } : null,
+  } : null;
+
   return (
     <div className="space-y-6 max-w-6xl">
       <div className="flex items-center justify-between">
@@ -293,6 +315,29 @@ export default function MLPredictPage() {
 
           {pred && !loading && (
             <>
+              {/* Input Verification */}
+              <Card className="p-4 space-y-3">
+                <h3 className="font-semibold text-sm">Input Verification</h3>
+                <p className="text-xs text-muted-foreground">Confirming that the ML model received your exact input values.</p>
+                <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
+                  <span className="font-semibold text-muted-foreground">Field</span>
+                  <span className="font-semibold text-muted-foreground">You Sent</span>
+                  <span className="font-semibold text-muted-foreground">Model Received</span>
+                  {FIELDS.map(f => {
+                    const sent = (inputSent as any)[f.key];
+                    const recv = inputEcho[f.key];
+                    const match = sent !== undefined && recv !== undefined && Number(sent) === Number(recv);
+                    return [
+                      <span key={f.key + '-l'} className="text-muted-foreground">{f.label}</span>,
+                      <span key={f.key + '-s'} className="font-mono">{sent ?? '—'} {f.unit}</span>,
+                      <span key={f.key + '-r'} className={`font-mono ${match ? 'text-emerald-600' : recv !== undefined ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                        {recv != null ? `${recv} ${f.unit}` : '—'} {match ? '\u2713' : ''}
+                      </span>,
+                    ];
+                  })}
+                </div>
+              </Card>
+
               {/* Category + Confidence */}
               <Card className="p-5 space-y-4">
                 <div className="flex items-center gap-3">
@@ -354,8 +399,11 @@ export default function MLPredictPage() {
               {/* SHAP Features */}
               {shapData.length > 0 && (
                 <Card className="p-5 space-y-3">
-                  <h3 className="font-semibold">SHAP Feature Importance</h3>
-                  <p className="text-xs text-muted-foreground">Top features driving the prediction. Red = increases risk, Blue = decreases risk.</p>
+                  <h3 className="font-semibold">SHAP Feature Importance (Top 5)</h3>
+                  <p className="text-xs text-muted-foreground">
+                    These are <strong>SHAP contribution values</strong> — they show how much each internal model feature pushed the prediction toward risk (red) or safety (blue).
+                    They are NOT the raw sensor values you entered. The model internally derives 183 engineered features from your 6 inputs.
+                  </p>
                   <div className="h-52">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={shapData} layout="vertical" margin={{ left: 120, right: 20 }}>
@@ -378,10 +426,10 @@ export default function MLPredictPage() {
               <Card className="p-4">
                 <details>
                   <summary className="text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground">
-                    View Raw ML Response JSON
+                    View Raw ML Response JSON (all_values trimmed)
                   </summary>
                   <pre className="text-xs bg-muted p-3 rounded-lg mt-2 overflow-x-auto max-h-60">
-                    {JSON.stringify(pred, null, 2)}
+                    {JSON.stringify(cleanPred, null, 2)}
                   </pre>
                 </details>
               </Card>
