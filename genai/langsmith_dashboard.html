@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LUMIN.AI — LangSmith Observability Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d2e;
+      --border: #2a2d3e;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #6366f1;
+      --accent2: #22d3ee;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --orange: #f97316;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%);
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header h1 span { color: var(--accent2); }
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .header-actions select, .header-actions button {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .header-actions button:hover { border-color: var(--accent); }
+    .btn-primary {
+      background: var(--accent) !important;
+      border-color: var(--accent) !important;
+      font-weight: 600;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-link {
+      background: transparent !important;
+      color: var(--accent2) !important;
+      text-decoration: underline;
+      border: none !important;
+    }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+    /* KPI Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+    .kpi-card .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .kpi-card .value { font-size: 2rem; font-weight: 700; margin: 8px 0 4px; }
+    .kpi-card .sub { color: var(--muted); font-size: 0.75rem; }
+    .kpi-card.success .value { color: var(--green); }
+    .kpi-card.error .value { color: var(--red); }
+    .kpi-card.latency .value { color: var(--accent2); }
+    .kpi-card.tokens .value { color: var(--yellow); }
+
+    /* Chart grid */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .chart-card h3 {
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .chart-card canvas { max-height: 280px; }
+
+    /* Traces table */
+    .traces-section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .traces-section h3 { font-size: 1rem; margin-bottom: 16px; }
+    .traces-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .traces-table th {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--border);
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+    }
+    .traces-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      max-width: 350px;
+    }
+    .traces-table tr:hover { background: rgba(99, 102, 241, 0.08); }
+    .traces-table tr { cursor: pointer; }
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+    .status-success { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+    .status-error { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+    .status-pending { background: rgba(234, 179, 8, 0.15); color: var(--yellow); }
+
+    .truncate {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Trace detail modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px 20px;
+      overflow-y: auto;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      max-width: 900px;
+      width: 100%;
+      padding: 28px;
+      position: relative;
+    }
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+    .modal h2 { font-size: 1.2rem; margin-bottom: 20px; }
+    .modal-section {
+      margin-bottom: 20px;
+    }
+    .modal-section h4 {
+      color: var(--accent2);
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .modal-section pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 0.78rem;
+      overflow-x: auto;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .meta-item {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .meta-item .lbl { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; }
+    .meta-item .val { font-size: 1rem; font-weight: 600; margin-top: 4px; }
+
+    .children-list { margin-top: 12px; }
+    .child-step {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+    .child-step h5 { color: var(--accent); font-size: 0.85rem; margin-bottom: 8px; }
+    .child-meta { display: flex; gap: 16px; font-size: 0.75rem; color: var(--muted); margin-bottom: 8px; }
+
+    .loading {
+      text-align: center;
+      padding: 60px;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+    .loading .spinner {
+      display: inline-block;
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .public-link-bar {
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      padding: 14px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .public-link-bar span { font-size: 0.85rem; }
+    .public-link-bar a {
+      color: var(--accent2);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .public-link-bar a:hover { text-decoration: underline; }
+
+    @media (max-width: 600px) {
+      .chart-grid { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔍 LUMIN.AI — <span>LangSmith Observability</span></h1>
+    <div class="header-actions">
+      <select id="timeRange">
+        <option value="1">Last 1 hour</option>
+        <option value="6">Last 6 hours</option>
+        <option value="24" selected>Last 24 hours</option>
+        <option value="72">Last 3 days</option>
+        <option value="168">Last 7 days</option>
+      </select>
+      <button class="btn-primary" onclick="loadData()">Refresh</button>
+      <a href="https://smith.langchain.com/public/25d80aa6-41b8-4e01-9bf2-8414babc32f3/r" target="_blank">
+        <button class="btn-link">Open in LangSmith ↗</button>
+      </a>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="public-link-bar">
+      <span>📡 Public LangSmith trace link (share with judges):</span>
+      <a href="https://smith.langchain.com/public/25d80aa6-41b8-4e01-9bf2-8414babc32f3/r" target="_blank">
+        https://smith.langchain.com/public/25d80aa6-41b8-4e01-9bf2-8414babc32f3/r ↗
+      </a>
+    </div>
+
+    <div id="loadingState" class="loading">
+      <div class="spinner"></div>
+      <div>Loading LangSmith analytics...</div>
+    </div>
+
+    <div id="mainContent" style="display: none;">
+      <!-- KPI Cards -->
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <!-- Charts -->
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>📈 Latency Over Time (seconds)</h3>
+          <canvas id="latencyChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>🪙 Token Usage Over Time</h3>
+          <canvas id="tokenChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>📊 Calls by Endpoint</h3>
+          <canvas id="endpointChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>⚡ Avg Latency by Endpoint (seconds)</h3>
+          <canvas id="endpointLatencyChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>✅ Success vs Errors</h3>
+          <canvas id="statusChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>🪙 Prompt vs Completion Tokens</h3>
+          <canvas id="tokenSplitChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Traces Table -->
+      <div class="traces-section">
+        <h3>🔎 Recent Traces — Click any row for full details (inputs, outputs, child steps)</h3>
+        <div style="overflow-x: auto;">
+          <table class="traces-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Latency</th>
+                <th>Tokens</th>
+                <th>Prompt</th>
+                <th>Completion</th>
+              </tr>
+            </thead>
+            <tbody id="tracesBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trace Detail Modal -->
+  <div class="modal-overlay" id="traceModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <h2 id="modalTitle">Trace Detail</h2>
+      <div id="modalContent">
+        <div class="loading">
+          <div class="spinner"></div>
+          <div>Loading trace detail...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = "http://localhost:8000";
+    let charts = {};
+    let analyticsData = null;
+
+    // ---- Chart.js defaults ----
+    Chart.defaults.color = "#94a3b8";
+    Chart.defaults.borderColor = "rgba(42, 45, 62, 0.6)";
+    Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+
+    // ---- Load data ----
+    async function loadData() {
+      const hours = document.getElementById("timeRange").value;
+      document.getElementById("loadingState").style.display = "block";
+      document.getElementById("mainContent").style.display = "none";
+
+      try {
+        const resp = await fetch(`${API}/langsmith/analytics?hours=${hours}`);
+        if (!resp.ok) throw new Error(await resp.text());
+        analyticsData = await resp.json();
+
+        if (analyticsData.total_traces === 0) {
+          document.getElementById("loadingState").innerHTML =
+            `<div style="font-size:1.1rem; color: var(--yellow);">
+              ⚠️ No traces found in the last ${hours} hours.<br>
+              <span style="font-size:0.85rem; color: var(--muted);">
+                Make some API calls first (e.g. <code>curl ${API}/explanation/INV-P1-L2-0</code>)
+              </span>
+            </div>`;
+          return;
+        }
+
+        renderKPIs(analyticsData);
+        renderCharts(analyticsData);
+        renderTraces(analyticsData.timeline);
+
+        document.getElementById("loadingState").style.display = "none";
+        document.getElementById("mainContent").style.display = "block";
+      } catch (err) {
+        document.getElementById("loadingState").innerHTML =
+          `<div style="color: var(--red);">Error loading data: ${err.message}</div>`;
+      }
+    }
+
+    // ---- KPIs ----
+    function renderKPIs(data) {
+      const grid = document.getElementById("kpiGrid");
+      grid.innerHTML = `
+        <div class="kpi-card">
+          <div class="label">Total Traces</div>
+          <div class="value">${data.total_traces}</div>
+          <div class="sub">Last ${data.period_hours}h</div>
+        </div>
+        <div class="kpi-card success">
+          <div class="label">Success Rate</div>
+          <div class="value">${data.success_rate}%</div>
+          <div class="sub">${data.successful} ok / ${data.errors} errors</div>
+        </div>
+        <div class="kpi-card latency">
+          <div class="label">Avg Latency</div>
+          <div class="value">${data.latency.avg_s ?? "—"}s</div>
+          <div class="sub">P50: ${data.latency.p50_s ?? "—"}s · P95: ${data.latency.p95_s ?? "—"}s</div>
+        </div>
+        <div class="kpi-card tokens">
+          <div class="label">Total Tokens</div>
+          <div class="value">${(data.tokens.total).toLocaleString()}</div>
+          <div class="sub">Avg ${data.tokens.avg_per_call}/call</div>
+        </div>
+        <div class="kpi-card">
+          <div class="label">Prompt Tokens</div>
+          <div class="value">${(data.tokens.total_prompt).toLocaleString()}</div>
+          <div class="sub">Input tokens sent to LLM</div>
+        </div>
+        <div class="kpi-card">
+          <div class="label">Completion Tokens</div>
+          <div class="value">${(data.tokens.total_completion).toLocaleString()}</div>
+          <div class="sub">Output tokens from LLM</div>
+        </div>
+      `;
+    }
+
+    // ---- Charts ----
+    function destroyCharts() {
+      Object.values(charts).forEach(c => c.destroy());
+      charts = {};
+    }
+
+    function renderCharts(data) {
+      destroyCharts();
+      const timeline = [...data.timeline].reverse();
+
+      // Latency over time
+      charts.latency = new Chart(document.getElementById("latencyChart"), {
+        type: "line",
+        data: {
+          labels: timeline.map(t => fmtTime(t.start_time)),
+          datasets: [{
+            label: "Latency (s)",
+            data: timeline.map(t => t.latency_s),
+            borderColor: "#22d3ee",
+            backgroundColor: "rgba(34, 211, 238, 0.1)",
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+      });
+
+      // Token usage over time
+      charts.tokens = new Chart(document.getElementById("tokenChart"), {
+        type: "bar",
+        data: {
+          labels: timeline.map(t => fmtTime(t.start_time)),
+          datasets: [
+            {
+              label: "Prompt",
+              data: timeline.map(t => t.prompt_tokens),
+              backgroundColor: "rgba(99, 102, 241, 0.7)",
+            },
+            {
+              label: "Completion",
+              data: timeline.map(t => t.completion_tokens),
+              backgroundColor: "rgba(34, 211, 238, 0.7)",
+            },
+          ],
+        },
+        options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } },
+      });
+
+      // Calls by endpoint
+      const ep = data.endpoint_breakdown;
+      const epNames = Object.keys(ep);
+      const colors = ["#6366f1", "#22d3ee", "#22c55e", "#eab308", "#f97316", "#ef4444", "#a855f7", "#ec4899"];
+      charts.endpoint = new Chart(document.getElementById("endpointChart"), {
+        type: "doughnut",
+        data: {
+          labels: epNames,
+          datasets: [{
+            data: epNames.map(n => ep[n].count),
+            backgroundColor: epNames.map((_, i) => colors[i % colors.length]),
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { position: "right" } } },
+      });
+
+      // Avg latency by endpoint
+      charts.epLatency = new Chart(document.getElementById("endpointLatencyChart"), {
+        type: "bar",
+        data: {
+          labels: epNames,
+          datasets: [{
+            label: "Avg Latency (s)",
+            data: epNames.map(n => ep[n].avg_latency_s),
+            backgroundColor: epNames.map((_, i) => colors[i % colors.length]),
+          }],
+        },
+        options: { responsive: true, indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } },
+      });
+
+      // Success vs errors
+      charts.status = new Chart(document.getElementById("statusChart"), {
+        type: "doughnut",
+        data: {
+          labels: ["Success", "Error"],
+          datasets: [{
+            data: [data.successful, data.errors],
+            backgroundColor: ["#22c55e", "#ef4444"],
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { position: "right" } } },
+      });
+
+      // Token split
+      charts.tokenSplit = new Chart(document.getElementById("tokenSplitChart"), {
+        type: "pie",
+        data: {
+          labels: ["Prompt Tokens", "Completion Tokens"],
+          datasets: [{
+            data: [data.tokens.total_prompt, data.tokens.total_completion],
+            backgroundColor: ["#6366f1", "#22d3ee"],
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { position: "right" } } },
+      });
+    }
+
+    // ---- Traces table ----
+    function renderTraces(timeline) {
+      const body = document.getElementById("tracesBody");
+      body.innerHTML = timeline.map(t => `
+        <tr onclick="openTrace('${t.id}')">
+          <td>${fmtTime(t.start_time)}</td>
+          <td><strong>${t.name}</strong></td>
+          <td><span class="status-badge status-${t.status || 'pending'}">${t.status || 'running'}</span></td>
+          <td>${t.latency_s != null ? t.latency_s + "s" : "—"}</td>
+          <td>${t.total_tokens.toLocaleString()}</td>
+          <td>${t.prompt_tokens.toLocaleString()}</td>
+          <td>${t.completion_tokens.toLocaleString()}</td>
+        </tr>
+      `).join("");
+    }
+
+    // ---- Trace detail modal ----
+    async function openTrace(runId) {
+      const modal = document.getElementById("traceModal");
+      const title = document.getElementById("modalTitle");
+      const content = document.getElementById("modalContent");
+      modal.classList.add("active");
+      title.textContent = "Loading trace...";
+      content.innerHTML = `<div class="loading"><div class="spinner"></div><div>Fetching full trace detail...</div></div>`;
+
+      try {
+        const resp = await fetch(`${API}/langsmith/traces/${runId}`);
+        if (!resp.ok) throw new Error(await resp.text());
+        const trace = await resp.json();
+
+        title.textContent = `Trace: ${trace.name || runId}`;
+
+        let html = `
+          <div class="modal-section">
+            <h4>Metadata</h4>
+            <div class="meta-grid">
+              <div class="meta-item">
+                <div class="lbl">Status</div>
+                <div class="val"><span class="status-badge status-${trace.status || 'pending'}">${trace.status || 'running'}</span></div>
+              </div>
+              <div class="meta-item">
+                <div class="lbl">Run Type</div>
+                <div class="val">${trace.run_type || '—'}</div>
+              </div>
+              <div class="meta-item">
+                <div class="lbl">Total Tokens</div>
+                <div class="val">${(trace.total_tokens || 0).toLocaleString()}</div>
+              </div>
+              <div class="meta-item">
+                <div class="lbl">Prompt Tokens</div>
+                <div class="val">${(trace.prompt_tokens || 0).toLocaleString()}</div>
+              </div>
+              <div class="meta-item">
+                <div class="lbl">Completion Tokens</div>
+                <div class="val">${(trace.completion_tokens || 0).toLocaleString()}</div>
+              </div>
+              <div class="meta-item">
+                <div class="lbl">Start Time</div>
+                <div class="val" style="font-size:0.82rem;">${trace.start_time ? new Date(trace.start_time).toLocaleString() : '—'}</div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        if (trace.inputs) {
+          html += `
+            <div class="modal-section">
+              <h4>📥 Inputs (Prompts sent to LLM)</h4>
+              <pre>${escapeHtml(JSON.stringify(trace.inputs, null, 2))}</pre>
+            </div>
+          `;
+        }
+
+        if (trace.outputs) {
+          html += `
+            <div class="modal-section">
+              <h4>📤 Outputs (LLM Response)</h4>
+              <pre>${escapeHtml(JSON.stringify(trace.outputs, null, 2))}</pre>
+            </div>
+          `;
+        }
+
+        if (trace.error) {
+          html += `
+            <div class="modal-section">
+              <h4>❌ Error</h4>
+              <pre style="color: var(--red);">${escapeHtml(trace.error)}</pre>
+            </div>
+          `;
+        }
+
+        if (trace.children && trace.children.length > 0) {
+          html += `
+            <div class="modal-section">
+              <h4>🔗 Child Steps (${trace.children.length})</h4>
+              <div class="children-list">
+          `;
+          for (const child of trace.children) {
+            html += `
+              <div class="child-step">
+                <h5>${child.name || 'Step'} <span class="status-badge status-${child.status || 'pending'}">${child.status || 'running'}</span></h5>
+                <div class="child-meta">
+                  <span>Type: ${child.run_type || '—'}</span>
+                  <span>Tokens: ${(child.total_tokens || 0).toLocaleString()}</span>
+                  <span>Prompt: ${(child.prompt_tokens || 0).toLocaleString()}</span>
+                  <span>Completion: ${(child.completion_tokens || 0).toLocaleString()}</span>
+                </div>
+                ${child.inputs ? `<details><summary style="cursor:pointer; color: var(--accent2); font-size: 0.8rem;">View Inputs</summary><pre>${escapeHtml(JSON.stringify(child.inputs, null, 2))}</pre></details>` : ''}
+                ${child.outputs ? `<details><summary style="cursor:pointer; color: var(--accent2); font-size: 0.8rem;">View Outputs</summary><pre>${escapeHtml(JSON.stringify(child.outputs, null, 2))}</pre></details>` : ''}
+                ${child.error ? `<pre style="color: var(--red); margin-top: 6px;">${escapeHtml(child.error)}</pre>` : ''}
+              </div>
+            `;
+          }
+          html += `</div></div>`;
+        }
+
+        // Extra / model info
+        if (trace.extra) {
+          html += `
+            <div class="modal-section">
+              <h4>⚙️ Extra Metadata</h4>
+              <pre>${escapeHtml(JSON.stringify(trace.extra, null, 2))}</pre>
+            </div>
+          `;
+        }
+
+        content.innerHTML = html;
+      } catch (err) {
+        content.innerHTML = `<div style="color: var(--red);">Error loading trace: ${err.message}</div>`;
+      }
+    }
+
+    function closeModal() {
+      document.getElementById("traceModal").classList.remove("active");
+    }
+    document.getElementById("traceModal").addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closeModal();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+    // ---- Helpers ----
+    function fmtTime(iso) {
+      if (!iso) return "—";
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+    function escapeHtml(str) {
+      if (!str) return "";
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // ---- Init ----
+    loadData();
+  </script>
+</body>
+</html>

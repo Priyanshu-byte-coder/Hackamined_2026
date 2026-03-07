@@ -1,12 +1,14 @@
 """Thin wrapper around the OpenAI-compatible API (works with Groq, OpenAI, etc.)."""
 
 from openai import OpenAI
-from app.config import LLM_API_KEY, LLM_MODEL, LLM_BASE_URL
+from langsmith.wrappers import wrap_openai
+from app.config import LLM_API_KEY, LLM_MODEL, LLM_BASE_URL, LANGCHAIN_TRACING_V2
 
 
 class LLMClient:
     def __init__(self):
-        self.client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
+        client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
+        self.client = wrap_openai(client) if LANGCHAIN_TRACING_V2 else client
         self.model = LLM_MODEL
 
     # ---- single-turn ---------------------------------------------------
