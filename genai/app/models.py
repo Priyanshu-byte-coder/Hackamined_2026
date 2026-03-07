@@ -69,3 +69,29 @@ class HealthResponse(BaseModel):
     vector_store_loaded: bool
     inverters_monitored: int
     timestamp: datetime
+
+
+# ---------------------------------------------------------------------------
+# Simulation / ML pipeline models
+# ---------------------------------------------------------------------------
+
+class SimulateReading(BaseModel):
+    """Single inverter reading from the simulator."""
+    inverter_id: str
+    dc_voltage: float
+    dc_current: float
+    ac_power: float
+    module_temp: float
+    ambient_temp: float
+    irradiation: float
+    alarm_code: int = 0
+    op_state: int = 5120
+    power_factor: Optional[float] = None
+    frequency: Optional[float] = None
+
+
+class SimulateRequest(BaseModel):
+    """Request from the simulator — 1 reading = single predict, >1 = batch."""
+    readings: List[SimulateReading]
+    include_shap: bool = True
+    include_plot: bool = False

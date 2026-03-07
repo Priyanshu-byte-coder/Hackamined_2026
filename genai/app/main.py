@@ -12,13 +12,15 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import LLM_API_KEY, LANGCHAIN_API_KEY
+from app.config import LLM_API_KEY, LANGCHAIN_API_KEY, ML_INFERENCE_URL
 from app.langsmith_client import fetch_traces, fetch_trace_detail, compute_analytics
+from app import ml_client
 from app.models import (
     ExplanationResponse,
     ChatRequest,
     ChatResponse,
     HealthResponse,
+    SimulateRequest,
 )
 from app.llm import LLMClient
 from app.rag import RAGPipeline
@@ -33,6 +35,8 @@ from app.synthetic_data import (
     get_all_predictions,
     get_plant_predictions,
     get_plant_overview,
+    update_prediction,
+    update_predictions_batch,
     PLANTS,
 )
 
@@ -263,6 +267,101 @@ async def get_single_prediction(inverter_id: str):
     if not p:
         raise HTTPException(404, f"No prediction for '{inverter_id}'")
     return p.model_dump(mode="json")
+
+
+# =====================================================================
+#  SIMULATION PIPELINE  (Simulator → GenAI → ML Inference → GenAI → Frontend)
+# =====================================================================
+@app.post("/simulate", tags=["Simulation"])
+async def simulate_readings(req: SimulateRequest):
+    """
+    Receive simulated sensor readings, forward to ML inference server,
+    store predictions, and return enriched results.
+
+    - 1 reading  → calls ML /predict  (single)
+    - >1 reading → calls ML /predict/batch
+    """
+    if not req.readings:
+        raise HTTPException(400, "No readings provided")
+
+    try:
+        if len(req.readings) == 1:
+            # ── Single prediction ──
+            r = req.readings[0]
+            ml_result = ml_client.predict_single(
+                inverter_id=r.inverter_id,
+                dc_voltage=r.dc_voltage,
+                dc_current=r.dc_current,
+                ac_power=r.ac_power,
+                module_temp=r.module_temp,
+                ambient_temp=r.ambient_temp,
+                irradiation=r.irradiation,
+                alarm_code=r.alarm_code,
+                op_state=r.op_state,
+                power_factor=r.power_factor,
+                frequency=r.frequency,
+                include_shap=req.include_shap,
+                include_plot=req.include_plot,
+            )
+            # Update local prediction store
+            update_prediction(r.inverter_id, ml_result)
+
+            return {
+                "count": 1,
+                "predictions": [ml_result],
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        else:
+            # ── Batch prediction ──
+            batch_readings = []
+            for r in req.readings:
+                features = {
+                    "dc_voltage": r.dc_voltage,
+                    "dc_current": r.dc_current,
+                    "ac_power": r.ac_power,
+                    "module_temp": r.module_temp,
+                    "ambient_temp": r.ambient_temp,
+                    "irradiation": r.irradiation,
+                    "alarm_code": r.alarm_code,
+                    "op_state": r.op_state,
+                }
+                if r.power_factor is not None:
+                    features["power_factor"] = r.power_factor
+                if r.frequency is not None:
+                    features["frequency"] = r.frequency
+                batch_readings.append({
+                    "inverter_id": r.inverter_id,
+                    "features": features,
+                })
+
+            ml_result = ml_client.predict_batch(
+                readings=batch_readings,
+                mode="manual",
+                include_shap=req.include_shap,
+                include_plot=req.include_plot,
+            )
+
+            # Update local prediction store
+            predictions = ml_result.get("predictions", [])
+            update_predictions_batch(predictions)
+
+            return {
+                "count": ml_result.get("count", len(predictions)),
+                "predictions": predictions,
+                "timestamp": ml_result.get("timestamp", datetime.utcnow().isoformat()),
+            }
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"ML inference server error ({ML_INFERENCE_URL}): {exc}",
+        )
+
+
+@app.get("/ml/health", tags=["Simulation"])
+async def ml_health():
+    """Check connectivity to the ML inference server."""
+    return ml_client.health_check()
 
 
 # =====================================================================
