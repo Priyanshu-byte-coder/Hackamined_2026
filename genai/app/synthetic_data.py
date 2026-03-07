@@ -493,6 +493,76 @@ def get_all_inverter_ids() -> List[str]:
     return list(SYNTHETIC_PREDICTIONS.keys())
 
 
+def update_prediction(inverter_id: str, ml_result: dict) -> Optional[InverterPrediction]:
+    """
+    Update or create a prediction from ML inference result.
+    ml_result should match the response schema from the ML inference server.
+    """
+    meta = _inv_meta(inverter_id)
+    if not meta:
+        return None
+
+    # Map ML category (A-E) + predicted_class to RiskClass
+    predicted_class = ml_result.get("predicted_class", "no_risk")
+    risk_class_map = {
+        "no_risk": RiskClass.NO_RISK,
+        "degradation_risk": RiskClass.DEGRADATION_RISK,
+        "shutdown_risk": RiskClass.SHUTDOWN_RISK,
+    }
+    risk_class = risk_class_map.get(predicted_class, RiskClass.NO_RISK)
+
+    # Build SHAP values dict from ML response
+    shap_data = ml_result.get("shap") or {}
+    shap_values = {}
+    if isinstance(shap_data, dict) and "top_features" in shap_data:
+        for feat in shap_data["top_features"]:
+            shap_values[feat["feature"]] = feat["value"]
+    elif isinstance(shap_data, dict) and "all_values" in shap_data:
+        shap_values = shap_data["all_values"]
+
+    # Build raw_features from readings
+    readings = ml_result.get("readings", {})
+    raw_features = {}
+    feature_map = {
+        "dc_voltage": f"inverters[{meta['index']}].pv1_voltage",
+        "dc_current": f"inverters[{meta['index']}].pv1_current",
+        "ac_power": f"inverters[{meta['index']}].power",
+        "module_temp": f"inverters[{meta['index']}].temp",
+        "ambient_temp": "sensors[0].ambient_temp",
+        "irradiation": "meters[0].meter_active_power",
+    }
+    for api_key, feature_key in feature_map.items():
+        if api_key in readings:
+            raw_features[feature_key] = readings[api_key]
+
+    pred = InverterPrediction(
+        inverter_id=inverter_id,
+        plant_id=meta["plant_id"],
+        block=meta["block"],
+        logger_mac=meta["mac"],
+        inverter_index=meta["index"],
+        timestamp=datetime.utcnow(),
+        risk_score=ml_result.get("confidence", 0.5),
+        risk_class=risk_class,
+        shap_values=shap_values if shap_values else {"model_output": 0.0},
+        raw_features=raw_features if raw_features else {"power": 0.0},
+    )
+    SYNTHETIC_PREDICTIONS[inverter_id] = pred
+    return pred
+
+
+def update_predictions_batch(ml_results: list[dict]) -> list[InverterPrediction]:
+    """Update multiple predictions from ML inference batch results."""
+    updated = []
+    for result in ml_results:
+        inv_id = result.get("inverter_id")
+        if inv_id:
+            pred = update_prediction(inv_id, result)
+            if pred:
+                updated.append(pred)
+    return updated
+
+
 def get_plant_overview() -> str:
     """Return a concise text summary of all plants for chat context."""
     lines = []
