@@ -129,10 +129,11 @@ Plus **auto-generated PDF maintenance tickets**, **multi-turn conversational Q&A
 ### Architecture
 
 
-![Overall Scores](architecture.jpeg)
+![architecture](architecture.jpeg)
 
 ### Data Flow
 
+![dataflow](dataflow.jpeg)
 ```
 Simulator generates realistic sensor readings (CSV-derived ranges)
     │
