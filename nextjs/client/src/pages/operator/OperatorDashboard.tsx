@@ -25,7 +25,7 @@ export default function OperatorDashboard() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['operator-dashboard'],
     queryFn: () => operatorApi.getDashboard(),
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   if (isLoading) return (

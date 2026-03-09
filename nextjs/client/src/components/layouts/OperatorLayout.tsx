@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { operatorApi } from '@/lib/api';
 import {
   LayoutDashboard, AlertTriangle, MessageCircle, User, LogOut,
-  Sun, Moon, Bell, Menu, X, ChevronDown, ChevronRight, Zap
+  Sun, Moon, Bell, Menu, X, ChevronDown, ChevronRight, Zap, Beaker
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +30,7 @@ export default function OperatorLayout() {
   const { data: alerts = [] } = useQuery({
     queryKey: ['operator-alerts'],
     queryFn: () => operatorApi.getAlerts(),
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const pendingAlerts = (alerts as any[]).filter((a: any) => !a.acknowledged);

@@ -53,8 +53,8 @@ export default function ChatbotPage() {
     {
       role: 'bot',
       content: inverterName
-        ? `I'm SolarGuard AI. I can see you want to discuss **${inverterName}**. Ask me anything, or use the quick actions below.`
-        : `I'm SolarGuard AI. I can help you understand inverter faults, SHAP analysis, and maintenance procedures. Ask me about any inverter or issue!`,
+        ? `I'm Lumin AI. I can see you want to discuss **${inverterName}**. Ask me anything, or use the quick actions below.`
+        : `I'm Lumin AI. I can help you understand inverter faults, SHAP analysis, and maintenance procedures. Ask me about any inverter or issue!`,
     },
   ]);
   const [input, setInput] = useState('');
@@ -63,6 +63,7 @@ export default function ChatbotPage() {
   const [explanation, setExplanation] = useState<any | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Health check
   const { data: health, isError: healthError } = useQuery({
@@ -258,6 +259,7 @@ export default function ChatbotPage() {
             )}
             <div className="flex gap-2">
               <Input
+                ref={inputRef}
                 placeholder="Ask about an inverter fault, SHAP analysis, maintenance..."
                 value={input}
                 onChange={e => setInput(e.target.value)}
@@ -349,6 +351,25 @@ export default function ChatbotPage() {
                   {explanation.disclaimer && (
                     <p className="text-[10px] text-muted-foreground italic border-t pt-2">{explanation.disclaimer}</p>
                   )}
+
+                  {/* Continue conversation button */}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="w-full gap-2 mt-2"
+                    onClick={() => {
+                      const context = `Based on the analysis for ${inverterName}: ${riskPercent}% risk (${explanation.urgency}). ${explanation.summary}`;
+                      send(`${context}\n\nCan you provide more details about this?`);
+                      // Scroll to chat input and focus
+                      setTimeout(() => {
+                        inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        inputRef.current?.focus();
+                      }, 100);
+                    }}
+                  >
+                    <Bot className="h-4 w-4" />
+                    Continue with AI
+                  </Button>
                 </div>
               )}
 
@@ -374,6 +395,54 @@ export default function ChatbotPage() {
               >
                 {pdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
                 {pdfLoading ? 'Generating…' : 'Download PDF Ticket'}
+              </Button>
+            </Card>
+
+            <Card className="p-4">
+              <h2 className="font-semibold text-sm mb-2">Reference Report</h2>
+              <p className="text-xs text-muted-foreground mb-3">
+                Download the SolarWatch analysis report with methodology, model details, and comparative results.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-2"
+                onClick={() => {
+                  const a = document.createElement('a');
+                  a.href = chatbotApi.getReferencePdfUrl();
+                  a.download = 'SolarWatch-Analysis-Report.pdf';
+                  a.click();
+                }}
+              >
+                <FileDown className="h-4 w-4" />
+                Download Analysis Report
+              </Button>
+            </Card>
+          </div>
+        )}
+
+        {/* Reference PDF — always visible (not just with inverter context) */}
+        {!inverterName && (
+          <div className="w-80 flex flex-col gap-3">
+            <Card className="p-4">
+              <h2 className="font-semibold text-sm mb-2">Reference Report</h2>
+              <p className="text-xs text-muted-foreground mb-3">
+                Download the SolarWatch analysis report with methodology, model details, and comparative results.
+              </p>
+              <Button
+                variant="default"
+                size="sm"
+                className="w-full gap-2"
+                onClick={() => {
+                  const token = sessionStorage.getItem('sw_token');
+                  const a = document.createElement('a');
+                  a.href = chatbotApi.getReferencePdfUrl();
+                  a.download = 'SolarWatch-Analysis-Report.pdf';
+                  a.click();
+                }}
+              >
+                <FileDown className="h-4 w-4" />
+                Download Analysis Report
               </Button>
             </Card>
           </div>

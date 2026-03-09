@@ -243,4 +243,70 @@ router.get('/logs', async (req, res) => {
     }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  POST /api/chatbot/predict-test
+//  Manual single-datapoint ML prediction for testing / demo.
+//  Body: { inverter_id, dc_voltage, dc_current, ac_power, module_temp, ambient_temp, irradiation, ... }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/predict-test', async (req, res) => {
+    const ML_URL = process.env.ML_INFERENCE_URL || 'http://localhost:8001';
+    try {
+        const { inverter_id, dc_voltage, dc_current, ac_power, module_temp, ambient_temp, irradiation,
+                alarm_code, op_state, power_factor, frequency } = req.body;
+
+        if (dc_voltage == null || dc_current == null || ac_power == null ||
+            module_temp == null || ambient_temp == null || irradiation == null) {
+            return res.status(400).json({ error: 'All 6 core fields are required: dc_voltage, dc_current, ac_power, module_temp, ambient_temp, irradiation' });
+        }
+
+        // Call ML inference directly (skip GenAI for speed)
+        const mlRes = await fetch(`${ML_URL}/predict`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                inverter_id: inverter_id || 'TEST-INV',
+                dc_voltage: Number(dc_voltage),
+                dc_current: Number(dc_current),
+                ac_power: Number(ac_power),
+                module_temp: Number(module_temp),
+                ambient_temp: Number(ambient_temp),
+                irradiation: Number(irradiation),
+                alarm_code: Number(alarm_code) || 0,
+                op_state: Number(op_state) || 5120,
+                power_factor: power_factor != null ? Number(power_factor) : undefined,
+                frequency: frequency != null ? Number(frequency) : undefined,
+                include_shap: true,
+                include_plot: false,
+            }),
+        });
+        const mlText = await mlRes.text();
+        if (!mlRes.ok) {
+            let detail = mlText;
+            try { detail = JSON.parse(mlText)?.detail || mlText; } catch (_) {}
+            throw Object.assign(new Error(detail), { status: mlRes.status });
+        }
+        const prediction = JSON.parse(mlText);
+        res.json({ count: 1, predictions: [prediction], timestamp: new Date().toISOString() });
+    } catch (err) {
+        console.error('[Chatbot] Predict-test error:', err.message);
+        res.status(err.status || 500).json({ error: err.message || 'ML prediction failed' });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GET /api/chatbot/reference-pdf
+//  Download the reference analysis report PDF
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/reference-pdf', (req, res) => {
+    const path = require('path');
+    const pdfPath = path.join(__dirname, '..', 'reference-report.pdf');
+    const fs = require('fs');
+    if (!fs.existsSync(pdfPath)) {
+        return res.status(404).json({ error: 'Reference PDF not found' });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="SolarWatch-Analysis-Report.pdf"');
+    fs.createReadStream(pdfPath).pipe(res);
+});
+
 module.exports = router;

@@ -18,7 +18,7 @@ export default function OperatorAlerts() {
   const { data: alerts = [], isLoading } = useQuery({
     queryKey: ['operator-alerts'],
     queryFn: () => operatorApi.getAlerts(),
-    refetchInterval: 20000,
+    refetchInterval: 5000,
   });
 
   const ackMutation = useMutation({

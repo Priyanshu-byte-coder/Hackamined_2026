@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '@/lib/api';
 import {
   LayoutDashboard, Building2, Users, Monitor, AlertTriangle,
-  FileText, Settings, User, LogOut, Sun, Moon, Bell, Menu, X, Zap, Leaf
+  FileText, Settings, User, LogOut, Sun, Moon, Bell, Menu, X, Zap, Leaf, Beaker
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -68,7 +68,6 @@ export default function AdminLayout() {
           {navItem('/admin/operators', <Users className="h-4 w-4" />, 'Operator Management')}
           {navItem('/admin/monitoring', <Monitor className="h-4 w-4" />, 'Live Monitoring')}
           {navItem('/admin/alerts', <AlertTriangle className="h-4 w-4" />, 'Alerts', pendingCount)}
-          {navItem('/admin/audit-logs', <FileText className="h-4 w-4" />, 'Audit Logs')}
           {navItem('/admin/settings', <Settings className="h-4 w-4" />, 'Settings')}
           {navItem('/admin/profile', <User className="h-4 w-4" />, 'Profile')}
         </nav>

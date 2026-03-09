@@ -59,7 +59,7 @@ export default function InverterGridPage() {
   const { data: inverters = [], isLoading, refetch } = useQuery({
     queryKey: ['inverter-grid', plantId, blockId],
     queryFn: () => operatorApi.getInverterGrid(plantId!, blockId!),
-    refetchInterval: 30000,
+    refetchInterval: 3000,
     enabled: !!plantId && !!blockId,
   });
 
@@ -74,6 +74,13 @@ export default function InverterGridPage() {
       window.history.replaceState({}, '');
     }
   }, [inverters, location.state]);
+
+  // Keep selectedInv in sync with latest data when inverters refetch
+  useEffect(() => {
+    if (!selectedInv || !inverters.length) return;
+    const updated = (inverters as any[]).find((inv: any) => inv.id === selectedInv.id);
+    if (updated) setSelectedInv(updated);
+  }, [inverters]);
 
   // Fetch plant/block names for the sheet header
   const { data: plants = [] } = useQuery({
